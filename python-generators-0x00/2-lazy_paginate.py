@@ -20,7 +20,6 @@ def paginate_users(page_size, offset=0):
         query = """
             SELECT *
             FROM user_data 
-            -- ORDER BY name 
             LIMIT %s OFFSET %s
         """
         cursor.execute(query, (page_size, offset))
