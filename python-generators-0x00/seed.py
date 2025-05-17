@@ -197,7 +197,7 @@ def main():
     create_table(db_connection)
     
     # Read data from CSV
-    csv_file_path = "./user_data.csv"
+    csv_file_path = "../user_data.csv"
     data = read_csv_data(csv_file_path)
     
     # Insert data into the database
