@@ -1,5 +1,5 @@
 from seed import connect_to_prodev
-["SELECT * FROM user_data LIMIT"]
+
 def paginate_users(page_size, offset=0):
     """
     Fetch a specific page of users from the database.
