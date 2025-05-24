@@ -1,2 +1,15 @@
 .env
 test.ipynb
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.coverage
+*.egg-info/
+.DS_Store
+# Pytest cache
+.cache/
