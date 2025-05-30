@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """Unit tests for utils module.
 
 This module contains comprehensive unit tests for the utils module,
@@ -9,7 +10,7 @@ import unittest
 from unittest.mock import patch, Mock
 from parameterized import parameterized
 from utils import access_nested_map, get_json, memoize
-
+from client import GithubOrgClient
 
 class TestAccessNestedMap(unittest.TestCase):
     """Test class for access_nested_map function."""
@@ -31,7 +32,6 @@ class TestAccessNestedMap(unittest.TestCase):
         """Test that access_nested_map raises KeyError for invalid paths."""
         with self.assertRaises(KeyError):
             access_nested_map(nested_map, path)
-
 
 class TestGetJson(unittest.TestCase):
     """Test class for get_json function."""
@@ -57,7 +57,6 @@ class TestGetJson(unittest.TestCase):
 
         mock_get.assert_called_once_with(test_url)
         self.assertEqual(result, test_payload)
-
 
 class TestMemoize(unittest.TestCase):
     """Test class for memoize decorator."""
@@ -86,6 +85,38 @@ class TestMemoize(unittest.TestCase):
             self.assertEqual(result1, 42)
             self.assertEqual(result2, 42)
             mock_method.assert_called_once()
+
+class TestGithubOrgClient(unittest.TestCase):
+    """Test class for GithubOrgClient."""
+
+    @parameterized.expand([
+        ("google",),
+        ("abc",),
+    ])
+    @patch('client.get_json')
+    def test_org(self, org_name, mock_get_json):
+        """Test that GithubOrgClient.org returns the correct value.
+        
+        This test ensures that:
+        1. get_json is called once with the expected GitHub API URL
+        2. The org property returns the value from get_json
+        3. No external HTTP calls are made
+        
+        Args:
+            org_name: The organization name to test with
+            mock_get_json: The mocked get_json function
+        """
+
+        expected_org_data = {"login": org_name, "id": 12345}
+        mock_get_json.return_value = expected_org_data
+        
+        client = GithubOrgClient(org_name)
+        result = client.org
+
+        expected_url = f"https://api.github.com/orgs/{org_name}"
+        mock_get_json.assert_called_once_with(expected_url)
+        
+        self.assertEqual(result, expected_org_data)
 
 if __name__ == '__main__':
     unittest.main()
