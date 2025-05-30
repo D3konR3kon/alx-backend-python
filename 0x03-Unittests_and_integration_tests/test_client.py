@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
 """Unit tests for client module.
+
 This module contains comprehensive unit tests for the client module,
 specifically testing the GithubOrgClient class.
 """
 
 import unittest
 from unittest.mock import patch, PropertyMock
-from parameterized import parameterized
+from parameterized import parameterized, parameterized_class
 from client import GithubOrgClient
+import fixtures
 
 
 class TestGithubOrgClient(unittest.TestCase):
@@ -21,12 +23,12 @@ class TestGithubOrgClient(unittest.TestCase):
     @patch('client.get_json')
     def test_org(self, org_name, mock_get_json):
         """Test that GithubOrgClient.org returns the correct value.
-
+        
         This test ensures that:
         1. get_json is called once with the expected GitHub API URL
         2. The org property returns the value from get_json
         3. No external HTTP calls are made
-
+        
         Args:
             org_name: The organization name to test with
             mock_get_json: The mocked get_json function
@@ -45,7 +47,7 @@ class TestGithubOrgClient(unittest.TestCase):
 
     def test_public_repos_url(self):
         """Test that GithubOrgClient._public_repos_url returns the expected URL.
-
+        
         This test ensures that:
         1. The _public_repos_url property returns the correct repos_url from org data
         2. The org property is properly mocked to return known payload
@@ -65,6 +67,7 @@ class TestGithubOrgClient(unittest.TestCase):
         ) as mock_org:
 
             mock_org.return_value = known_payload
+
             client = GithubOrgClient("test-org")
             result = client._public_repos_url
 
@@ -73,11 +76,12 @@ class TestGithubOrgClient(unittest.TestCase):
     @patch('client.get_json')
     def test_public_repos(self, mock_get_json):
         """Test that GithubOrgClient.public_repos returns the expected list of repos.
+        
         This test ensures that:
         1. get_json is called once with the mocked _public_repos_url
         2. The public_repos method returns the expected list of repository names
         3. Both the mocked property and get_json are called exactly once
-
+        
         Args:
             mock_get_json: The mocked get_json function
         """
@@ -87,7 +91,6 @@ class TestGithubOrgClient(unittest.TestCase):
             {"name": "repo2", "license": {"key": "apache-2.0"}},
             {"name": "repo3", "license": None},
         ]
-        
 
         mock_get_json.return_value = test_payload
 
@@ -100,16 +103,12 @@ class TestGithubOrgClient(unittest.TestCase):
         ) as mock_public_repos_url:
 
             mock_public_repos_url.return_value = test_repos_url
-
             client = GithubOrgClient("test-org")
             result = client.public_repos()
-
             expected_repos = ["repo1", "repo2", "repo3"]
 
             self.assertEqual(result, expected_repos)
-
             mock_public_repos_url.assert_called_once()
-
             mock_get_json.assert_called_once_with(test_repos_url)
 
     @parameterized.expand([
@@ -129,12 +128,79 @@ class TestGithubOrgClient(unittest.TestCase):
             license_key: The license key to check for
             expected: The expected boolean result
         """
-
+        # Create a client instance (org name doesn't matter for this test)
         client = GithubOrgClient("test-org")
 
+        # Call has_license with the test parameters
         result = client.has_license(repo, license_key)
 
+        # Assert that the result matches the expected value
         self.assertEqual(result, expected)
+
+@parameterized_class(
+    ("org_payload", "repos_payload", "expected_repos", "apache2_repos"),
+    [
+        (
+            fixtures.org_payload,
+            fixtures.repos_payload,
+            fixtures.expected_repos,
+            fixtures.apache2_repos
+        )
+    ]
+)
+class TestIntegrationGithubOrgClient(unittest.TestCase):
+    """Integration test class for GithubOrgClient.
+
+    This class tests the integration of GithubOrgClient methods while only
+    mocking external HTTP requests. It uses fixtures to provide realistic
+    test data and ensures the client works correctly end-to-end.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class-level fixtures and start patching requests.get.
+
+        This method:
+        1. Starts a patcher for requests.get
+        2. Configures the mock to return appropriate fixtures based on URL
+        3. Sets up the side_effect to handle different API endpoints
+        """
+        def requests_get_side_effect(url):
+            """Side effect function to return appropriate fixtures based on URL.
+
+            Args:
+                url: The URL being requested
+
+            Returns:
+                Mock response object with json() method
+            """
+            from unittest.mock import Mock
+
+            mock_response = Mock()
+
+            if url.endswith("/orgs/google"):
+                mock_response.json.return_value = cls.org_payload
+
+            elif "/repos" in url:
+                mock_response.json.return_value = cls.repos_payload
+            else:
+                mock_response.json.return_value = {}
+
+            return mock_response
+
+        cls.get_patcher = patch('requests.get')
+        cls.mock_requests_get = cls.get_patcher.start()
+
+        cls.mock_requests_get.side_effect = requests_get_side_effect
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up class-level fixtures and stop patching.
+
+        This method stops the requests.get patcher to ensure clean test
+        environment and prevent side effects on other tests.
+        """
+        cls.get_patcher.stop()
 
 if __name__ == '__main__':
     unittest.main()
