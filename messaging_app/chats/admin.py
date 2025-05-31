@@ -1,6 +1,3 @@
-from django.contrib import admin
-
-
 # chats/admin.py
 
 from django.contrib import admin
@@ -30,7 +27,7 @@ class ConversationParticipantInline(admin.TabularInline):
 
 @admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title', 'conversation_type', 'created_by', 'created_at', 'is_active')
+    list_display = ('conversation_id', 'title', 'conversation_type', 'created_by', 'created_at', 'is_active')
     list_filter = ('conversation_type', 'is_active', 'created_at')
     search_fields = ('title', 'created_by__email')
     inlines = [ConversationParticipantInline]
@@ -38,14 +35,14 @@ class ConversationAdmin(admin.ModelAdmin):
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ('id', 'sender', 'conversation', 'message_type', 'content_preview', 'created_at', 'is_deleted')
-    list_filter = ('message_type', 'is_edited', 'is_deleted', 'created_at')
-    search_fields = ('content', 'sender__email')
-    readonly_fields = ('created_at', 'updated_at')
+    list_display = ('message_id', 'sender', 'conversation', 'message_type', 'content_preview', 'sent_at', 'is_deleted')
+    list_filter = ('message_type', 'is_edited', 'is_deleted', 'sent_at')
+    search_fields = ('message_body', 'sender__email')
+    readonly_fields = ('sent_at', 'updated_at')
     
     def content_preview(self, obj):
-        if obj.message_type == 'text' and obj.content:
-            return obj.content[:50] + "..." if len(obj.content) > 50 else obj.content
+        if obj.message_type == 'text' and obj.message_body:
+            return obj.message_body[:50] + "..." if len(obj.message_body) > 50 else obj.message_body
         return f"[{obj.message_type}]"
     content_preview.short_description = 'Content Preview'
 

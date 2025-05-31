@@ -11,8 +11,9 @@ class User(AbstractUser):
     """
     Extended User model with additional fields for messaging functionality
     """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
+    # Note: password, first_name, last_name are inherited from AbstractUser
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
     bio = models.TextField(max_length=500, blank=True)
@@ -23,7 +24,7 @@ class User(AbstractUser):
     
     # Override username to use email as the unique identifier
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username']
+    REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
     
     class Meta:
         db_table = 'users'
@@ -48,7 +49,7 @@ class Conversation(models.Model):
         ('group', 'Group Chat'),
     ]
     
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255, blank=True, null=True)  # For group chats
     conversation_type = models.CharField(max_length=10, choices=CONVERSATION_TYPES, default='direct')
     participants = models.ManyToManyField(
@@ -79,7 +80,7 @@ class Conversation(models.Model):
             participants = self.participants.all()[:2]
             if len(participants) >= 2:
                 return f"Chat: {participants[0].username} & {participants[1].username}"
-            return f"Conversation {self.id}"
+            return f"Conversation {self.conversation_id}"
     
     def get_last_message(self):
         """Get the most recent message in this conversation"""
@@ -90,7 +91,7 @@ class Conversation(models.Model):
         try:
             participant = self.conversation_participants.get(user=user)
             return self.messages.filter(
-                created_at__gt=participant.last_read_at
+                sent_at__gt=participant.last_read_at
             ).exclude(sender=user).count()
         except ConversationParticipant.DoesNotExist:
             return 0
@@ -151,7 +152,7 @@ class Message(models.Model):
         ('system', 'System Message'),
     ]
     
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    message_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     conversation = models.ForeignKey(
         Conversation,
         on_delete=models.CASCADE,
@@ -163,7 +164,7 @@ class Message(models.Model):
         related_name='sent_messages'
     )
     message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
-    content = models.TextField(blank=True)  # Text content
+    message_body = models.TextField(blank=True)  # Text content - renamed from 'content'
     file_attachment = models.FileField(upload_to='message_files/', blank=True, null=True)
     reply_to = models.ForeignKey(
         'self',
@@ -176,7 +177,7 @@ class Message(models.Model):
     edited_at = models.DateTimeField(null=True, blank=True)
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(auto_now_add=True)  # Renamed from 'created_at'
     updated_at = models.DateTimeField(auto_now=True)
     
     # Message reactions
@@ -190,11 +191,11 @@ class Message(models.Model):
         db_table = 'messages'
         verbose_name = 'Message'
         verbose_name_plural = 'Messages'
-        ordering = ['-created_at']
+        ordering = ['-sent_at']  # Updated to use 'sent_at'
     
     def __str__(self):
         if self.message_type == 'text':
-            preview = self.content[:50] + "..." if len(self.content) > 50 else self.content
+            preview = self.message_body[:50] + "..." if len(self.message_body) > 50 else self.message_body
             return f"{self.sender.username}: {preview}"
         else:
             return f"{self.sender.username}: [{self.message_type}]"
@@ -246,4 +247,4 @@ class MessageReaction(models.Model):
         verbose_name_plural = 'Message Reactions'
     
     def __str__(self):
-        return f"{self.user.username} reacted {self.get_reaction_type_display()} to message {self.message.id}"
+        return f"{self.user.username} reacted {self.get_reaction_type_display()} to message {self.message.message_id}"
