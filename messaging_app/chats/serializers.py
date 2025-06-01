@@ -12,8 +12,8 @@ class UserSerializer(serializers.ModelSerializer):
     """
     Basic User serializer for general user information
     """
-    full_name = serializers.SerializerMethodField()
-    is_online_status = serializers.SerializerMethodField()
+    full_name = serializers.CharField(read_only=True)
+    is_online_status = serializers.CharField(read_only=True)
     
     class Meta:
         model = User
@@ -24,22 +24,28 @@ class UserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['user_id', 'created_at', 'last_seen']
     
-    def get_full_name(self, obj):
-        """Get user's full name or fallback to username"""
-        full_name = obj.get_full_name()
-        return full_name if full_name.strip() else obj.username
-    
-    def get_is_online_status(self, obj):
-        """Determine if user is currently online based on last_seen"""
-        if obj.is_online:
-            return "online"
+    def to_representation(self, instance):
+        """
+        Override to populate computed fields using SerializerMethodField logic
+        """
+        data = super().to_representation(instance)
         
-        # Consider user online if last seen within 5 minutes
-        time_threshold = timezone.now() - timezone.timedelta(minutes=5)
-        if obj.last_seen and obj.last_seen > time_threshold:
-            return "recently_active"
+        # Populate full_name
+        full_name = instance.get_full_name()
+        data['full_name'] = full_name if full_name.strip() else instance.username
         
-        return "offline"
+        # Populate is_online_status
+        if instance.is_online:
+            data['is_online_status'] = "online"
+        else:
+            # Consider user online if last seen within 5 minutes
+            time_threshold = timezone.now() - timezone.timedelta(minutes=5)
+            if instance.last_seen and instance.last_seen > time_threshold:
+                data['is_online_status'] = "recently_active"
+            else:
+                data['is_online_status'] = "offline"
+        
+        return data
 
 
 class UserProfileSerializer(UserSerializer):
@@ -55,16 +61,24 @@ class UserMinimalSerializer(serializers.ModelSerializer):
     """
     Minimal User serializer for nested relationships (reduces payload size)
     """
-    full_name = serializers.SerializerMethodField()
+    full_name = serializers.CharField(read_only=True)
     
     class Meta:
         model = User
         fields = ['user_id', 'username', 'first_name', 'last_name', 'full_name', 'profile_picture', 'is_online']
         read_only_fields = ['user_id']
     
-    def get_full_name(self, obj):
-        full_name = obj.get_full_name()
-        return full_name if full_name.strip() else obj.username
+    def to_representation(self, instance):
+        """
+        Override to populate computed fields
+        """
+        data = super().to_representation(instance)
+        
+        # Populate full_name
+        full_name = instance.get_full_name()
+        data['full_name'] = full_name if full_name.strip() else instance.username
+        
+        return data
 
 
 class MessageReactionSerializer(serializers.ModelSerializer):
@@ -72,16 +86,23 @@ class MessageReactionSerializer(serializers.ModelSerializer):
     Serializer for message reactions
     """
     user = UserMinimalSerializer(read_only=True)
-    reaction_emoji = serializers.SerializerMethodField()
+    reaction_emoji = serializers.CharField(read_only=True)
     
     class Meta:
         model = MessageReaction
         fields = ['id', 'user', 'reaction_type', 'reaction_emoji', 'created_at']
         read_only_fields = ['id', 'created_at']
     
-    def get_reaction_emoji(self, obj):
-        """Get the emoji representation of the reaction"""
-        return dict(MessageReaction.REACTION_TYPES).get(obj.reaction_type, '')
+    def to_representation(self, instance):
+        """
+        Override to populate computed fields
+        """
+        data = super().to_representation(instance)
+        
+        # Populate reaction_emoji
+        data['reaction_emoji'] = dict(MessageReaction.REACTION_TYPES).get(instance.reaction_type, '')
+        
+        return data
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -89,12 +110,12 @@ class MessageSerializer(serializers.ModelSerializer):
     Main Message serializer with nested relationships
     """
     sender = UserMinimalSerializer(read_only=True)
-    reply_to_message = serializers.SerializerMethodField()
+    reply_to_message = serializers.DictField(read_only=True)
     reactions = MessageReactionSerializer(source='message_reactions', many=True, read_only=True)
-    reaction_summary = serializers.SerializerMethodField()
-    replies_count = serializers.SerializerMethodField()
-    file_url = serializers.SerializerMethodField()
-    is_own_message = serializers.SerializerMethodField()
+    reaction_summary = serializers.DictField(read_only=True)
+    replies_count = serializers.IntegerField(read_only=True)
+    file_url = serializers.CharField(read_only=True, allow_null=True)
+    is_own_message = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = Message
@@ -109,21 +130,27 @@ class MessageSerializer(serializers.ModelSerializer):
             'edited_at', 'is_deleted'
         ]
     
-    def get_reply_to_message(self, obj):
-        """Get basic info about the message being replied to"""
-        if obj.reply_to and not obj.reply_to.is_deleted:
-            return {
-                'message_id': obj.reply_to.message_id,
-                'sender': UserMinimalSerializer(obj.reply_to.sender).data,
-                'message_type': obj.reply_to.message_type,
-                'message_body': obj.reply_to.message_body[:100] + "..." if len(obj.reply_to.message_body) > 100 else obj.reply_to.message_body,
-                'sent_at': obj.reply_to.sent_at
+    def to_representation(self, instance):
+        """
+        Override to populate all computed fields for messages
+        """
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # Populate reply_to_message
+        if instance.reply_to and not instance.reply_to.is_deleted:
+            data['reply_to_message'] = {
+                'message_id': instance.reply_to.message_id,
+                'sender': UserMinimalSerializer(instance.reply_to.sender).data,
+                'message_type': instance.reply_to.message_type,
+                'message_body': instance.reply_to.message_body[:100] + "..." if len(instance.reply_to.message_body) > 100 else instance.reply_to.message_body,
+                'sent_at': instance.reply_to.sent_at
             }
-        return None
-    
-    def get_reaction_summary(self, obj):
-        """Get a summary of reactions (count by type)"""
-        reactions = obj.message_reactions.all()
+        else:
+            data['reply_to_message'] = None
+        
+        # Populate reaction_summary
+        reactions = instance.message_reactions.all()
         summary = {}
         for reaction in reactions:
             reaction_type = reaction.reaction_type
@@ -135,27 +162,27 @@ class MessageSerializer(serializers.ModelSerializer):
                 }
             summary[reaction_type]['count'] += 1
             summary[reaction_type]['users'].append(reaction.user.username)
-        return summary
-    
-    def get_replies_count(self, obj):
-        """Get count of replies to this message"""
-        return obj.replies.filter(is_deleted=False).count()
-    
-    def get_file_url(self, obj):
-        """Get the full URL for file attachments"""
-        if obj.file_attachment:
-            request = self.context.get('request')
+        data['reaction_summary'] = summary
+        
+        # Populate replies_count
+        data['replies_count'] = instance.replies.filter(is_deleted=False).count()
+        
+        # Populate file_url
+        if instance.file_attachment:
             if request:
-                return request.build_absolute_uri(obj.file_attachment.url)
-            return obj.file_attachment.url
-        return None
-    
-    def get_is_own_message(self, obj):
-        """Check if the message belongs to the current user"""
-        request = self.context.get('request')
+                data['file_url'] = request.build_absolute_uri(instance.file_attachment.url)
+            else:
+                data['file_url'] = instance.file_attachment.url
+        else:
+            data['file_url'] = None
+        
+        # Populate is_own_message
         if request and request.user.is_authenticated:
-            return obj.sender == request.user
-        return False
+            data['is_own_message'] = instance.sender == request.user
+        else:
+            data['is_own_message'] = False
+        
+        return data
 
 
 class MessageCreateSerializer(serializers.ModelSerializer):
@@ -190,7 +217,7 @@ class ConversationParticipantSerializer(serializers.ModelSerializer):
     Serializer for conversation participants
     """
     user = UserMinimalSerializer(read_only=True)
-    unread_count = serializers.SerializerMethodField()
+    unread_count = serializers.IntegerField(read_only=True)
     
     class Meta:
         model = ConversationParticipant
@@ -200,12 +227,19 @@ class ConversationParticipantSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'joined_at']
     
-    def get_unread_count(self, obj):
-        """Get unread message count for this participant"""
-        return obj.conversation.messages.filter(
-            sent_at__gt=obj.last_read_at,
+    def to_representation(self, instance):
+        """
+        Override to populate computed fields
+        """
+        data = super().to_representation(instance)
+        
+        # Populate unread_count
+        data['unread_count'] = instance.conversation.messages.filter(
+            sent_at__gt=instance.last_read_at,
             is_deleted=False
-        ).exclude(sender=obj.user).count()
+        ).exclude(sender=instance.user).count()
+        
+        return data
 
 
 class ConversationSerializer(serializers.ModelSerializer):
@@ -218,11 +252,11 @@ class ConversationSerializer(serializers.ModelSerializer):
         read_only=True
     )
     created_by = UserMinimalSerializer(read_only=True)
-    last_message = serializers.SerializerMethodField()
-    unread_count = serializers.SerializerMethodField()
-    participant_count = serializers.SerializerMethodField()
-    display_name = serializers.SerializerMethodField()
-    display_image = serializers.SerializerMethodField()
+    last_message = serializers.DictField(read_only=True, allow_null=True)
+    unread_count = serializers.IntegerField(read_only=True)
+    participant_count = serializers.IntegerField(read_only=True)
+    display_name = serializers.CharField(read_only=True)
+    display_image = serializers.CharField(read_only=True, allow_null=True)
     
     class Meta:
         model = Conversation
@@ -234,11 +268,17 @@ class ConversationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['conversation_id', 'created_at', 'updated_at']
     
-    def get_last_message(self, obj):
-        """Get the most recent message in the conversation"""
-        last_message = obj.get_last_message()
+    def to_representation(self, instance):
+        """
+        Override to populate all computed fields for conversations
+        """
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # Populate last_message
+        last_message = instance.get_last_message()
         if last_message:
-            return {
+            data['last_message'] = {
                 'message_id': last_message.message_id,
                 'sender': UserMinimalSerializer(last_message.sender).data,
                 'message_type': last_message.message_type,
@@ -246,63 +286,68 @@ class ConversationSerializer(serializers.ModelSerializer):
                 'sent_at': last_message.sent_at,
                 'is_deleted': last_message.is_deleted
             }
-        return None
-    
-    def get_unread_count(self, obj):
-        """Get unread count for the current user"""
-        request = self.context.get('request')
+        else:
+            data['last_message'] = None
+        
+        # Populate unread_count
         if request and request.user.is_authenticated:
-            return obj.get_unread_count(request.user)
-        return 0
-    
-    def get_participant_count(self, obj):
-        """Get total number of active participants"""
-        return obj.conversation_participants.filter(is_active=True).count()
-    
-    def get_display_name(self, obj):
-        """Get display name for the conversation"""
-        if obj.conversation_type == 'group' and obj.title:
-            return obj.title
+            data['unread_count'] = instance.get_unread_count(request.user)
+        else:
+            data['unread_count'] = 0
         
-        # For direct messages, show the other participant's name
-        request = self.context.get('request')
-        if request and request.user.is_authenticated and obj.conversation_type == 'direct':
-            other_participant = obj.participants.exclude(user_id=request.user.user_id).first()
+        # Populate participant_count
+        data['participant_count'] = instance.conversation_participants.filter(is_active=True).count()
+        
+        # Populate display_name
+        if instance.conversation_type == 'group' and instance.title:
+            data['display_name'] = instance.title
+        elif request and request.user.is_authenticated and instance.conversation_type == 'direct':
+            other_participant = instance.participants.exclude(user_id=request.user.user_id).first()
             if other_participant:
-                return other_participant.get_full_name() or other_participant.username
+                full_name = other_participant.get_full_name()
+                data['display_name'] = full_name if full_name.strip() else other_participant.username
+            else:
+                data['display_name'] = f"Conversation {str(instance.conversation_id)[:8]}"
+        else:
+            data['display_name'] = f"Conversation {str(instance.conversation_id)[:8]}"
         
-        return f"Conversation {str(obj.conversation_id)[:8]}"
-    
-    def get_display_image(self, obj):
-        """Get display image for the conversation"""
-        # For direct messages, use the other participant's profile picture
-        request = self.context.get('request')
-        if request and request.user.is_authenticated and obj.conversation_type == 'direct':
-            other_participant = obj.participants.exclude(user_id=request.user.user_id).first()
+        # Populate display_image
+        if request and request.user.is_authenticated and instance.conversation_type == 'direct':
+            other_participant = instance.participants.exclude(user_id=request.user.user_id).first()
             if other_participant and other_participant.profile_picture:
-                return request.build_absolute_uri(other_participant.profile_picture.url)
+                data['display_image'] = request.build_absolute_uri(other_participant.profile_picture.url)
+            else:
+                data['display_image'] = None
+        else:
+            data['display_image'] = None
         
-        # For group chats, could implement group image logic here
-        return None
+        return data
 
 
 class ConversationDetailSerializer(ConversationSerializer):
     """
     Detailed Conversation serializer that includes recent messages
     """
-    recent_messages = serializers.SerializerMethodField()
+    recent_messages = MessageSerializer(many=True, read_only=True)
     
     class Meta(ConversationSerializer.Meta):
         fields = ConversationSerializer.Meta.fields + ['recent_messages']
     
-    def get_recent_messages(self, obj):
-        """Get recent messages in the conversation"""
-        recent_messages = obj.messages.filter(is_deleted=False)[:20]
-        return MessageSerializer(
+    def to_representation(self, instance):
+        """
+        Override to populate recent_messages
+        """
+        data = super().to_representation(instance)
+        
+        # Populate recent_messages
+        recent_messages = instance.messages.filter(is_deleted=False)[:20]
+        data['recent_messages'] = MessageSerializer(
             recent_messages, 
             many=True, 
             context=self.context
         ).data
+        
+        return data
 
 
 class ConversationCreateSerializer(serializers.ModelSerializer):
