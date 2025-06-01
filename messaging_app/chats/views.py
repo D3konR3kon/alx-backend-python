@@ -1,8 +1,9 @@
 # views.py
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.db.models import Q, Prefetch
 from .models import Conversation, Message, ConversationParticipant, MessageReaction
@@ -23,6 +24,10 @@ class ConversationViewSet(viewsets.ModelViewSet):
     Provides CRUD operations for conversations with participant filtering
     """
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter] 
+    filterset_fields = ['conversation_type', 'is_active']
+    search_fields = ['conversation_participants__user__username'] 
+    ordering_fields = ['updated_at', 'created_at']
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -50,7 +55,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         
-        # Check for existing direct conversation
+
         if serializer.validated_data.get('conversation_type') == 'direct':
             participant_ids = serializer.validated_data.get('participant_ids', [])
             if participant_ids:
@@ -234,6 +239,10 @@ class MessageViewSet(viewsets.ModelViewSet):
     Provides CRUD operations for messages with conversation filtering
     """
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['conversation', 'is_deleted']
+    search_fields = ['message_body']
+    ordering_fields = ['sent_at', 'updated_at']
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -257,8 +266,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         Set the sender as the current user and validate conversation access
         """
         conversation = serializer.validated_data['conversation']
-        
-        # Check if user is an active participant in the conversation
+
         participant = ConversationParticipant.objects.filter(
             conversation=conversation,
             user=self.request.user,
