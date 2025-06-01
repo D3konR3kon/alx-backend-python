@@ -61,7 +61,7 @@ class UserMinimalSerializer(serializers.ModelSerializer):
     """
     Minimal User serializer for nested relationships (reduces payload size)
     """
-    full_name = serializers.CharField(read_only=True)
+    full_name = serializers.SerializerMethodField()
     
     class Meta:
         model = User
