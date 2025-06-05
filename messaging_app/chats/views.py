@@ -1,5 +1,5 @@
 # views.py
-from rest_framework import viewsets, status, filters
+from rest_framework import viewsets, status, filters, generics, permissions 
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -14,9 +14,90 @@ from .serializers import (
     MessageSerializer, 
     MessageCreateSerializer,
     MessageReactionCreateSerializer,
-    ConversationParticipantSerializer
+    ConversationParticipantSerializer,
+    UserSerializer,
+    UserProfileSerializer,
+    UserMinimalSerializer, 
 )
 
+# JWT customization and User Views
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework import serializers as drf_serializers 
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+# JWT Customization
+class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
+   
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+
+        token['email'] = user.email
+        token['username'] = user.username
+        token['first_name'] = user.first_name
+        token['last_name'] = user.last_name
+        token['is_online'] = user.is_online
+        token['user_id'] = str(user.user_id)
+        return token
+
+class MyTokenObtainPairView(TokenObtainPairView):
+    """
+    Custom token view to use our MyTokenObtainPairSerializer.
+    This will be used if you decide to replace the default simplejwt TokenObtainPairView.
+    """
+    serializer_class = MyTokenObtainPairSerializer
+
+
+# User Registration View
+class UserRegistrationView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    permission_classes = (permissions.AllowAny,)
+
+    class RegisterSerializer(UserProfileSerializer):
+        password = drf_serializers.CharField(write_only=True) 
+
+        class Meta(UserProfileSerializer.Meta):
+            fields = UserProfileSerializer.Meta.fields + ['password']
+            read_only_fields = ['user_id', 'created_at', 'last_seen', 'updated_at']
+
+        def create(self, validated_data):
+          
+            user = User.objects.create_user(
+                username=validated_data['username'],
+                email=validated_data['email'],
+                password=validated_data['password'],
+                first_name=validated_data.get('first_name', ''),
+                last_name=validated_data.get('last_name', ''),
+                phone_number=validated_data.get('phone_number'),
+                bio=validated_data.get('bio', '')
+            )
+            return user
+    serializer_class = RegisterSerializer
+
+
+# User Profile View (for the currently authenticated user)
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserProfileSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_object(self):
+        return self.request.user
+
+
+class UserListView(viewsets.ReadOnlyModelViewSet): 
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+    lookup_field = 'user_id' 
+
+class UserDetailView(generics.RetrieveAPIView): 
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    lookup_field = 'user_id' 
+    permission_classes = (permissions.IsAuthenticated,)
 
 class ConversationViewSet(viewsets.ModelViewSet):
     """
