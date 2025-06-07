@@ -1,7 +1,7 @@
-from rest_framework.permissions import BasePermission
+from rest_framework import permissions
 from .models import ConversationParticipant
 
-class IsParticipant(BasePermission):
+class IsParticipant(permissions.BasePermission):
     """
     Allows access only to active participants of the conversation.
     """
