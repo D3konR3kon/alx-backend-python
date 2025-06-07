@@ -527,13 +527,12 @@ class MessageViewSet(viewsets.ModelViewSet):
         if participant:
             participant.mark_as_read()
         
-        page = int(request.query_params.get('page', 1))
-        limit = min(int(request.query_params.get('limit', 50)), 100)
-        offset = (page - 1) * limit
-        
-        messages = self.get_queryset().filter(
-            conversation=conversation
-        ).order_by('-sent_at')[offset:offset + limit]
-        
-        serializer = self.get_serializer(messages, many=True)
+        queryset = self.get_queryset().filter(conversation=conversation).order_by('-sent_at')
+        page = self.paginate_queryset(queryset)
+
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+       
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
