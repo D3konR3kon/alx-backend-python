@@ -3,12 +3,14 @@ from .models import ConversationParticipant
 
 class IsParticipant(permissions.BasePermission):
     """
-    Custom permission to allow only active participants of a conversation
-    to view, send, update, or delete messages.
+    Allows only authenticated users who are active participants of the conversation
+    to perform message-related actions.
     """
+    allowed_methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated
+
+        return request.user and request.user.is_authenticated and request.method in self.allowed_methods
 
     def has_object_permission(self, request, view, obj):
         """
