@@ -6,6 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.db.models import Q, Prefetch
+
+from chats.permissions import IsParticipant
 from .models import Conversation, Message, ConversationParticipant, MessageReaction
 from .serializers import (
     ConversationSerializer, 
@@ -104,7 +106,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
     ViewSet for managing conversations
     Provides CRUD operations for conversations with participant filtering
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsParticipant]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter] 
     filterset_fields = ['conversation_type', 'is_active']
     search_fields = ['conversation_participants__user__username'] 
@@ -167,6 +169,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
         Get paginated messages for a specific conversation
         """
         conversation = self.get_object()
+        self.check_object_permissions(request, conversation)
+
         
         # Mark messages as read
         participant = ConversationParticipant.objects.filter(
@@ -179,7 +183,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         
         # Get messages with pagination support
         page = request.query_params.get('page', 1)
-        limit = min(int(request.query_params.get('limit', 50)), 100)  # Max 100 messages
+        limit = min(int(request.query_params.get('limit', 50)), 100) 
         offset = (int(page) - 1) * limit
         
         messages = conversation.messages.filter(
@@ -201,19 +205,20 @@ class ConversationViewSet(viewsets.ModelViewSet):
         Send a message to a specific conversation
         """
         conversation = self.get_object()
-        
+        self.check_object_permissions(request, conversation)
+
         # Check if user is an active participant
-        participant = ConversationParticipant.objects.filter(
-            conversation=conversation,
-            user=request.user,
-            is_active=True
-        ).first()
+        # participant = ConversationParticipant.objects.filter(
+        #     conversation=conversation,
+        #     user=request.user,
+        #     is_active=True
+        # ).first()
         
-        if not participant:
-            return Response(
-                {'error': 'You are not an active participant in this conversation'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # if not participant:
+        #     return Response(
+        #         {'error': 'You are not an active participant in this conversation'}, 
+        #         status=status.HTTP_403_FORBIDDEN
+        #     )
         
         serializer = MessageCreateSerializer(data=request.data)
         if serializer.is_valid():
@@ -231,87 +236,128 @@ class ConversationViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    # @action(detail=True, methods=['post'])
+    # def add_participant(self, request, pk=None):
+    #     """
+    #     Add a participant to a group conversation (owner/admin only)
+    #     """
+    #     conversation = self.get_object()
+    #     self.check_object_permissions(request, conversation)
+
+        
+       
+    #     participant = ConversationParticipant.objects.filter(
+    #         conversation=conversation,
+    #         user=request.user,
+    #         role__in=['owner', 'admin']
+    #     ).first()
+
+    #     if not participant:
+    #         return Response(
+    #             {'error': 'You do not have permission to add participants'}, 
+    #             status=status.HTTP_403_FORBIDDEN
+    #         )
+        
+        
+    #     user_id = request.data.get('user_id')
+    #     if not user_id:
+    #         return Response(
+    #             {'error': 'user_id is required'}, 
+    #             status=status.HTTP_400_BAD_REQUEST
+    #         )
+        
+    #     try:
+    #         from django.contrib.auth import get_user_model
+    #         User = get_user_model()
+    #         user = User.objects.get(user_id=user_id)
+            
+            
+    #         if ConversationParticipant.objects.filter(
+    #             conversation=conversation,
+    #             user=user
+    #         ).exists():
+    #             return Response(
+    #                 {'error': 'User is already a participant'}, 
+    #                 status=status.HTTP_400_BAD_REQUEST
+    #             )
+            
+            
+    #         new_participant = ConversationParticipant.objects.create(
+    #             conversation=conversation,
+    #             user=user,
+    #             role='member'
+    #         )
+            
+    #         serializer = ConversationParticipantSerializer(new_participant)
+    #         return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+    #     except User.DoesNotExist:
+    #         return Response(
+    #             {'error': 'User not found'}, 
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
+    
     @action(detail=True, methods=['post'])
     def add_participant(self, request, pk=None):
-        """
-        Add a participant to a group conversation (owner/admin only)
-        """
         conversation = self.get_object()
-        
-        # Check if user has permission to add participants
+
+        self.check_object_permissions(request, conversation)
+
         participant = ConversationParticipant.objects.filter(
             conversation=conversation,
             user=request.user,
             role__in=['owner', 'admin']
         ).first()
-        
+
         if not participant:
             return Response(
                 {'error': 'You do not have permission to add participants'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
-        
+
         user_id = request.data.get('user_id')
         if not user_id:
-            return Response(
-                {'error': 'user_id is required'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({'error': 'user_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             from django.contrib.auth import get_user_model
             User = get_user_model()
             user = User.objects.get(user_id=user_id)
-            
-            # Check if user is already a participant
-            if ConversationParticipant.objects.filter(
-                conversation=conversation,
-                user=user
-            ).exists():
-                return Response(
-                    {'error': 'User is already a participant'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Add participant
+
+            if ConversationParticipant.objects.filter(conversation=conversation, user=user).exists():
+                return Response({'error': 'User is already a participant'}, status=status.HTTP_400_BAD_REQUEST)
+
             new_participant = ConversationParticipant.objects.create(
                 conversation=conversation,
                 user=user,
                 role='member'
             )
-            
+
             serializer = ConversationParticipantSerializer(new_participant)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
+
         except User.DoesNotExist:
-            return Response(
-                {'error': 'User not found'}, 
-                status=status.HTTP_404_NOT_FOUND
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+        @action(detail=True, methods=['post'])
+        def leave(self, request, pk=None):
+            """
+            Leave a conversation (mark participant as inactive)
+            """
+            conversation = self.get_object()
+            self.check_object_permissions(request, conversation)
+
+            
+            participant = ConversationParticipant.objects.filter(
+                conversation=conversation,
+                user=request.user,
             )
-    
-    @action(detail=True, methods=['post'])
-    def leave(self, request, pk=None):
-        """
-        Leave a conversation (mark participant as inactive)
-        """
-        conversation = self.get_object()
-        
-        participant = ConversationParticipant.objects.filter(
-            conversation=conversation,
-            user=request.user,
-            is_active=True
-        ).first()
-        
-        if not participant:
-            return Response(
-                {'error': 'You are not a participant in this conversation'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        participant.is_active = False
-        participant.save()
-        
-        return Response({'message': 'Successfully left the conversation'})
+            
+            participant.is_active = False
+            participant.save()
+            
+            return Response({'message': 'Successfully left the conversation'})
 
 
 class MessageViewSet(viewsets.ModelViewSet):
