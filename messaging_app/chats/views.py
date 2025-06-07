@@ -365,7 +365,7 @@ class MessageViewSet(viewsets.ModelViewSet):
     ViewSet for managing messages
     Provides CRUD operations for messages with conversation filtering
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsParticipant]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['conversation', 'is_deleted']
     search_fields = ['message_body']
@@ -418,7 +418,9 @@ class MessageViewSet(viewsets.ModelViewSet):
         """
         Add or toggle a reaction to a message
         """
+        
         message = self.get_object()
+        self.check_object_permissions(request, message)
         
         serializer = MessageReactionCreateSerializer(
             data=request.data,
@@ -453,6 +455,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         Edit a message (only by sender)
         """
         message = self.get_object()
+        self.check_object_permissions(request, message)
         
         if message.sender != request.user:
             return Response(
@@ -480,6 +483,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         Soft delete a message (only by sender)
         """
         message = self.get_object()
+        self.check_object_permissions(request, message)
         
         if message.sender != request.user:
             return Response(
@@ -503,8 +507,8 @@ class MessageViewSet(viewsets.ModelViewSet):
                 {'error': 'conversation_id parameter is required'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Verify the conversation exists and user has access
+       
+
         conversation = get_object_or_404(
             Conversation.objects.filter(
                 conversation_participants__user=request.user,
@@ -513,7 +517,8 @@ class MessageViewSet(viewsets.ModelViewSet):
             conversation_id=conversation_id
         )
         
-        # Mark messages as read
+        self.check_object_permissions(request, conversation)
+
         participant = ConversationParticipant.objects.filter(
             conversation=conversation,
             user=request.user
@@ -522,7 +527,6 @@ class MessageViewSet(viewsets.ModelViewSet):
         if participant:
             participant.mark_as_read()
         
-        # Get paginated messages
         page = int(request.query_params.get('page', 1))
         limit = min(int(request.query_params.get('limit', 50)), 100)
         offset = (page - 1) * limit
@@ -533,7 +537,3 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(messages, many=True)
         return Response(serializer.data)
-
-
-
-
