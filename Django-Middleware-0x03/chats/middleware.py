@@ -1,5 +1,8 @@
 import logging
 from datetime import datetime
+from datetime import datetime, time
+from django.http import JsonResponse
+
 
 class RequestLoggingMiddleware:
     def __init__(self, get_response):
@@ -21,3 +24,24 @@ class RequestLoggingMiddleware:
 
         response = self.get_response(request)
         return response
+
+
+class RestrictAccessByTimeMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+       
+        start_time = time(18, 0) 
+        end_time = time(21, 0) 
+        current_time = datetime.now().time()
+
+        if not (start_time <= current_time <= end_time):
+            return JsonResponse(
+                {
+                    "error": "Access to messaging is only allowed between 6PM and 9PM."
+                },
+                status=403
+            )
+
+        return self.get_response(request)
