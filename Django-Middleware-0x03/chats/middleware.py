@@ -1,8 +1,10 @@
 import logging
-from datetime import datetime
+
 from datetime import datetime, time
 from django.http import JsonResponse
-
+from django.http import JsonResponse
+from collections import defaultdict
+from datetime import datetime, timedelta
 
 class RequestLoggingMiddleware:
     def __init__(self, get_response):
@@ -45,3 +47,41 @@ class RestrictAccessByTimeMiddleware:
             )
 
         return self.get_response(request)
+
+
+
+class OffensiveLanguageMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+        self.message_log = defaultdict(list)
+        self.limit = 5
+        self.window = 60 
+
+    def __call__(self, request):
+        if request.method == 'POST' and '/send_message/' in request.path:
+            ip = self.get_client_ip(request)
+            now = time.time()
+
+            recent_timestamps = [
+                ts for ts in self.message_log[ip] if now - ts < self.window
+            ]
+            self.message_log[ip] = recent_timestamps
+
+            if len(recent_timestamps) >= self.limit:
+                return JsonResponse(
+                    {"error": "Rate limit exceeded. You can only send 5 messages per minute."},
+                    status=429
+                )
+
+
+            self.message_log[ip].append(now)
+
+        return self.get_response(request)
+
+    def get_client_ip(self, request):
+        """Gets client IP address from request headers (supports proxies)"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR')
