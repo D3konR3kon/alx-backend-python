@@ -1,14 +1,14 @@
-# views.py
 from rest_framework import viewsets, status, filters, generics, permissions 
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404
 from django.db.models import Q, Prefetch
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
 
 from messaging.permissions import IsParticipant
-from messaging.utils.thread_local import build_message_tree
 from .models import Conversation, Message, ConversationParticipant, MessageReaction
 from .serializers import (
     ConversationSerializer, 
@@ -27,15 +27,6 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework import serializers as drf_serializers 
 from django.contrib.auth import get_user_model
-
-from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
-from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import csrf_protect
-from django.contrib import messages
-from django.core.paginator import Paginator
-from .models import Notification, Conversation
-from .utils.notifications import NotificationManager, get_notification_context
 
 User = get_user_model()
 
@@ -59,6 +50,7 @@ class MyTokenObtainPairView(TokenObtainPairView):
     This will be used if you decide to replace the default simplejwt TokenObtainPairView.
     """
     serializer_class = MyTokenObtainPairSerializer
+
 
 
 class UserRegistrationView(generics.CreateAPIView):
@@ -157,7 +149,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 ).first()
                 
                 if existing_conversation:
-                    # Return existing conversation instead of creating new one
                     return Response(
                         ConversationSerializer(existing_conversation, context={'request': request}).data,
                         status=status.HTTP_200_OK
@@ -169,11 +160,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED
         )
     
+    @method_decorator(cache_page(60))
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
         """
         Get paginated messages for a specific conversation
-        Also marks messages as read when retrieved
+        Cached for 60 seconds
         """
         conversation = self.get_object()
         self.check_object_permissions(request, conversation)
@@ -186,14 +178,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         if participant:
             participant.mark_as_read()
         
- 
-        unread_messages = Message.objects.filter(
-            conversation=conversation,
-            is_read=False,
-            is_deleted=False
-        ).exclude(sender=request.user)
-        unread_messages.update(is_read=True)
-        
+
         page = request.query_params.get('page', 1)
         limit = min(int(request.query_params.get('limit', 50)), 100) 
         offset = (int(page) - 1) * limit
@@ -210,7 +195,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
             context={'request': request}
         )
         return Response(serializer.data)
-
     
     @action(detail=True, methods=['post'])
     def send_message(self, request, pk=None):
@@ -240,10 +224,9 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 conversation=conversation
             )
             
-            # Update conversation's updated_at timestamp
+
             conversation.save(update_fields=['updated_at'])
             
-            # Return the created message with full details
             message_serializer = MessageSerializer(message, context={'request': request})
             return Response(message_serializer.data, status=status.HTTP_201_CREATED)
         
@@ -309,24 +292,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
     #             {'error': 'User not found'}, 
     #             status=status.HTTP_404_NOT_FOUND
     #         )
-    @action(detail=True, methods=['get'], url_path='threaded-messages')
-    def threaded_messages(self, request, pk=None):
-        conversation = self.get_object()
-        self.check_object_permissions(request, conversation)
-
-        top_level_messages = Message.objects.filter(
-            conversation=conversation,
-            reply_to__isnull=True,
-            is_deleted=False
-        ).select_related('sender').prefetch_related(
-            Prefetch('replies', queryset=Message.objects.select_related('sender'))
-        ).order_by('sent_at')
-
-        thread_data = [build_message_tree(msg) for msg in top_level_messages]
-
-
-        return Response({'threads': thread_data})
-
+    
     @action(detail=True, methods=['post'])
     def add_participant(self, request, pk=None):
         conversation = self.get_object()
@@ -369,25 +335,25 @@ class ConversationViewSet(viewsets.ModelViewSet):
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    @action(detail=True, methods=['post'])
+    def leave(self, request, pk=None):
+        """
+        Leave a conversation (mark participant as inactive)
+        """
+        conversation = self.get_object()
+        self.check_object_permissions(request, conversation)
 
-        @action(detail=True, methods=['post'])
-        def leave(self, request, pk=None):
-            """
-            Leave a conversation (mark participant as inactive)
-            """
-            conversation = self.get_object()
-            self.check_object_permissions(request, conversation)
-
-            
-            participant = ConversationParticipant.objects.filter(
-                conversation=conversation,
-                user=request.user,
-            )
-            
+        
+        participant = ConversationParticipant.objects.filter(
+            conversation=conversation,
+            user=request.user,
+        ).first()
+        
+        if participant:
             participant.is_active = False
             participant.save()
-            
-            return Response({'message': 'Successfully left the conversation'})
+        
+        return Response({'message': 'Successfully left the conversation'})
 
 
 class MessageViewSet(viewsets.ModelViewSet):
@@ -421,7 +387,6 @@ class MessageViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """
         Set the sender as the current user and validate conversation access
-        New messages are unread by default (is_read=False)
         """
         conversation = serializer.validated_data['conversation']
 
@@ -438,11 +403,12 @@ class MessageViewSet(viewsets.ModelViewSet):
             )
         
         message = serializer.save(sender=self.request.user)
-
+        
+      
         conversation.save(update_fields=['updated_at'])
         
         return message
-
+    
     @action(detail=True, methods=['post'])
     def react(self, request, pk=None):
         """
@@ -466,11 +432,10 @@ class MessageViewSet(viewsets.ModelViewSet):
             ).first()
             
             if existing_reaction:
-                # Remove existing reaction (toggle off)
                 existing_reaction.delete()
                 return Response({'message': 'Reaction removed'})
             else:
-                # Add new reaction
+
                 reaction = serializer.save()
                 return Response(
                     MessageReactionCreateSerializer(reaction).data,
@@ -526,10 +491,12 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         return Response({'message': 'Message deleted successfully'})
     
+    @method_decorator(cache_page(60))
     @action(detail=False, methods=['get'])
     def by_conversation(self, request):
         """
         Get messages filtered by conversation ID with pagination
+        Cached for 60 seconds
         """
         conversation_id = request.query_params.get('conversation_id')
         if not conversation_id:
@@ -566,269 +533,3 @@ class MessageViewSet(viewsets.ModelViewSet):
        
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
-
-    @action(detail=True, methods=['get'])
-    def messages(self, request, pk=None):
-        conversation = self.get_object()
-        self.check_object_permissions(request, conversation)
-
-        participant = ConversationParticipant.objects.filter(
-            conversation=conversation,
-            user=request.user
-        ).first()
-        
-        if participant:
-            participant.mark_as_read()
-            Message.objects.filter(
-                conversation=conversation,
-                sent_at__lte=timezone.now(),
-                is_read=False
-            ).exclude(sender=request.user).update(is_read=True)
-        
-        page = request.query_params.get('page', 1)
-        limit = min(int(request.query_params.get('limit', 50)), 100)
-        offset = (int(page) - 1) * limit
-        
-        messages = conversation.messages.filter(
-            is_deleted=False
-        ).select_related('sender', 'reply_to__sender').prefetch_related(
-            'message_reactions__user'
-        ).order_by('-sent_at')[offset:offset + limit]
-        
-        serializer = MessageSerializer(
-            messages, 
-            many=True, 
-            context={'request': request}
-        )
-        return Response(serializer.data)
-
-def get_threaded_messages(conversation):
-    messages = Message.objects.filter(
-        conversation=conversation,
-        parent_message__isnull=True
-    ).select_related('sender').prefetch_related(
-        Prefetch('replies', queryset=Message.objects.select_related('sender'))
-    )
-
-    return messages
-# ========================
-#  Notification Views
-# ========================
-
-
-@login_required
-def notification_list(request):
-    """
-    Display all notifications for the current user
-    """
-    notifications = NotificationManager.get_unread_notifications(request.user)
-    
-    paginator = Paginator(notifications, 20)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    
-    notifications_with_context = []
-    for notification in page_obj:
-        context = get_notification_context(notification)
-        notifications_with_context.append(context)
-    
-    context = {
-        'notifications': notifications_with_context,
-        'page_obj': page_obj,
-        'unread_count': NotificationManager.get_unread_count(request.user)
-    }
-    
-    return render(request, 'notifications/list.html', context)
-
-
-@login_required
-def notification_count_api(request):
-    """
-    API endpoint to get unread notification count
-    """
-    count = NotificationManager.get_unread_count(request.user)
-    return JsonResponse({'unread_count': count})
-
-
-@login_required
-@require_POST
-@csrf_protect
-def mark_notification_read(request, notification_id):
-    """
-    Mark a specific notification as read
-    """
-    notification = get_object_or_404(
-        Notification,
-        notification_id=notification_id,
-        recipient=request.user
-    )
-    
-    notification.mark_as_read()
-    
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return JsonResponse({'success': True, 'message': 'Notification marked as read'})
-    
-    messages.success(request, 'Notification marked as read')
-    return redirect('notifications:list')
-
-
-@login_required
-@require_POST
-@csrf_protect
-def mark_all_notifications_read(request):
-    """
-    Mark all notifications as read for the current user
-    """
-    count = NotificationManager.mark_all_notifications_read(request.user)
-    
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return JsonResponse({
-            'success': True,
-            'message': f'{count} notifications marked as read',
-            'count': count
-        })
-    
-    messages.success(request, f'{count} notifications marked as read')
-    return redirect('notifications:list')
-
-
-@login_required
-@require_POST
-@csrf_protect
-def mark_conversation_notifications_read(request, conversation_id):
-    """
-    Mark all notifications from a specific conversation as read
-    """
-    conversation = get_object_or_404(Conversation, conversation_id=conversation_id)
-    
-
-    if not conversation.participants.filter(user_id=request.user.user_id).exists():
-        return JsonResponse({'error': 'Not authorized'}, status=403)
-    
-    count = NotificationManager.mark_conversation_notifications_read(
-        request.user, 
-        conversation
-    )
-    
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return JsonResponse({
-            'success': True,
-            'message': f'{count} notifications marked as read',
-            'count': count
-        })
-    
-    return redirect('chats:conversation_detail', conversation_id=conversation_id)
-
-def notifications_context_processor(request):
-    """
-    Add notification count to template context
-    """
-    if request.user.is_authenticated:
-        return {
-            'unread_notification_count': NotificationManager.get_unread_count(request.user)
-        }
-    return {}
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def unread_messages_inbox(request):
-    """
-    Get all unread messages for the current user (inbox view)
-    Uses the custom UnreadMessagesManager with optimized queries
-    """
-    # Get unread messages with only necessary fields for performance
-    unread_messages = Message.unread.for_user_optimized(request.user)
-    
-    # Pagination support
-    page = request.query_params.get('page', 1)
-    limit = min(int(request.query_params.get('limit', 20)), 50)
-    offset = (int(page) - 1) * limit
-    
-    paginated_messages = unread_messages[offset:offset + limit]
-    
-    # Serialize the messages
-    from .serializers import MessageSerializer
-    serializer = MessageSerializer(
-        paginated_messages, 
-        many=True, 
-        context={'request': request}
-    )
-    
-    return Response({
-        'messages': serializer.data,
-        'total_unread': Message.unread.count_for_user(request.user),
-        'page': int(page),
-        'limit': limit
-    })
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def unread_count(request):
-    """
-    Get the count of unread messages for the current user
-    """
-    count = Message.unread.count_for_user(request.user)
-    return Response({'unread_count': count})
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def mark_message_as_read(request, message_id):
-    """
-    Mark a specific message as read
-    """
-    try:
-        message = Message.objects.get(
-            message_id=message_id,
-            conversation__conversation_participants__user=request.user,
-            conversation__conversation_participants__is_active=True
-        )
-        message.mark_as_read()
-        return Response({'message': 'Message marked as read'})
-    except Message.DoesNotExist:
-        return Response(
-            {'error': 'Message not found or you do not have access'}, 
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def mark_conversation_as_read(request, conversation_id):
-    """
-    Mark all messages in a conversation as read
-    """
-    try:
-        from .models import Conversation
-        conversation = Conversation.objects.get(
-            conversation_id=conversation_id,
-            conversation_participants__user=request.user,
-            conversation_participants__is_active=True
-        )
-        
-        # Mark all unread messages in this conversation as read
-        unread_messages = Message.objects.filter(
-            conversation=conversation,
-            is_read=False,
-            is_deleted=False
-        ).exclude(sender=request.user)
-        
-        unread_messages.update(is_read=True)
-        
-        # Also update the participant's last_read_at (to maintain consistency with existing system)
-        participant = conversation.conversation_participants.filter(user=request.user).first()
-        if participant:
-            participant.mark_as_read()
-        
-        return Response({
-            'message': f'Marked {unread_messages.count()} messages as read',
-            'conversation_id': str(conversation_id)
-        })
-        
-    except Conversation.DoesNotExist:
-        return Response(
-            {'error': 'Conversation not found or you do not have access'}, 
-            status=status.HTTP_404_NOT_FOUND
-        )
