@@ -27,7 +27,7 @@ from messaging.views import MyTokenObtainPairView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('messaging.urls')),
+    path('api/v1/', include('messaging.urls')),
     path('api-auth/', include('rest_framework.urls')),
     path('api/auth/token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
