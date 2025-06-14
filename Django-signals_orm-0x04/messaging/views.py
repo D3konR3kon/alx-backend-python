@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.db.models import Q, Prefetch
 
 from messaging.permissions import IsParticipant
+from messaging.utils.thread_local import build_message_tree
 from .models import Conversation, Message, ConversationParticipant, MessageReaction
 from .serializers import (
     ConversationSerializer, 
@@ -302,7 +303,24 @@ class ConversationViewSet(viewsets.ModelViewSet):
     #             {'error': 'User not found'}, 
     #             status=status.HTTP_404_NOT_FOUND
     #         )
-    
+    @action(detail=True, methods=['get'], url_path='threaded-messages')
+    def threaded_messages(self, request, pk=None):
+        conversation = self.get_object()
+        self.check_object_permissions(request, conversation)
+
+        top_level_messages = Message.objects.filter(
+            conversation=conversation,
+            reply_to__isnull=True,
+            is_deleted=False
+        ).select_related('sender').prefetch_related(
+            Prefetch('replies', queryset=Message.objects.select_related('sender'))
+        ).order_by('sent_at')
+
+        thread_data = [build_message_tree(msg) for msg in top_level_messages]
+
+
+        return Response({'threads': thread_data})
+
     @action(detail=True, methods=['post'])
     def add_participant(self, request, pk=None):
         conversation = self.get_object()
@@ -544,6 +562,15 @@ class MessageViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+def get_threaded_messages(conversation):
+    messages = Message.objects.filter(
+        conversation=conversation,
+        parent_message__isnull=True
+    ).select_related('sender').prefetch_related(
+        Prefetch('replies', queryset=Message.objects.select_related('sender'))
+    )
+
+    return messages
 # ========================
 #  Notification Views
 # ========================

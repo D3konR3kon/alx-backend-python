@@ -165,7 +165,7 @@ class Message(models.Model):
     message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
     message_body = models.TextField(blank=True)  # Text content - renamed from 'content'
     file_attachment = models.FileField(upload_to='message_files/', blank=True, null=True)
-    reply_to = models.ForeignKey(
+    parent_message = models.ForeignKey(
         'self',
         on_delete=models.SET_NULL,
         null=True,
