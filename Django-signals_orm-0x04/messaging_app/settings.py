@@ -44,7 +44,7 @@ INSTALLED_APPS = [
 
     'rest_framework_simplejwt',
     'rest_framework',
-    'chats',
+    'messaging',
 ]
 
 MIDDLEWARE = [
@@ -55,9 +55,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'chats.middleware.RequestLoggingMiddleware',
-    'chats.middleware.RestrictAccessByTimeMiddleware',
-    'chats.middleware.OffensiveLanguageMiddleware',
+    'messaging.middleware.RequestLoggingMiddleware',
+    'messaging.middleware.RestrictAccessByTimeMiddleware',
+    'messaging.middleware.OffensiveLanguageMiddleware',
 ]
 
 ROOT_URLCONF = 'messaging_app.urls'
@@ -145,7 +145,7 @@ REST_FRAMEWORK = {
         # 'rest_framework.authentication.BasicAuthentication',
         # 'rest_framework.authentication.SessionAuthentication',
         # 'rest_framework.authentication.TokenAuthentication',
-        'chats.auth.CustomJWTAuthentication'
+        'messaging.auth.CustomJWTAuthentication'
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -181,4 +181,4 @@ SIMPLE_JWT = {
     'JTI_CLAIM': 'jti',
 }
 
-AUTH_USER_MODEL = 'chats.User'
+AUTH_USER_MODEL = 'messaging.User'

@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from chats.utils.notifications import NotificationManager
+from messaging.utils.notifications import NotificationManager
 
 
 class Command(BaseCommand):
@@ -27,7 +27,7 @@ class Command(BaseCommand):
         cutoff_date = timezone.now() - timezone.timedelta(days=days)
         
         if dry_run:
-            from chats.models import Notification
+            from messaging.models import Notification
             count = Notification.objects.filter(
                 is_read=True,
                 read_at__lt=cutoff_date

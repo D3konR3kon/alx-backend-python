@@ -7,7 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404, redirect, render
 from django.db.models import Q, Prefetch
 
-from chats.permissions import IsParticipant
+from messaging.permissions import IsParticipant
 from .models import Conversation, Message, ConversationParticipant, MessageReaction
 from .serializers import (
     ConversationSerializer, 

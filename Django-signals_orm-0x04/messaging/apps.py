@@ -1,10 +1,10 @@
 from django.apps import AppConfig
 
 
-class ChatsConfig(AppConfig):
+class MessaginConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'chats'
+    name = 'messaging'
 
     def ready(self):
         """Import signals when the app is ready"""
-        import chats.signals
+        import messaging.signals
