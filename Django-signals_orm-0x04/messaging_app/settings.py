@@ -52,12 +52,14 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
+    'messaging.middleware.CurrentUserMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'messaging.middleware.RequestLoggingMiddleware',
     'messaging.middleware.RestrictAccessByTimeMiddleware',
     'messaging.middleware.OffensiveLanguageMiddleware',
+
 ]
 
 ROOT_URLCONF = 'messaging_app.urls'

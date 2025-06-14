@@ -5,6 +5,8 @@ from django.http import JsonResponse
 from django.http import JsonResponse
 from collections import defaultdict
 from datetime import datetime, timedelta
+from messaging.utils.thread_local import set_current_user
+
 
 class RequestLoggingMiddleware:
     def __init__(self, get_response):
@@ -48,6 +50,16 @@ class RestrictAccessByTimeMiddleware:
 
         return self.get_response(request)
 
+
+
+class CurrentUserMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        set_current_user(request.user)
+        response = self.get_response(request)
+        return response
 
 
 class OffensiveLanguageMiddleware:
