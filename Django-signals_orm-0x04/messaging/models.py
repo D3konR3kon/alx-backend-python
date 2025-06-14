@@ -2,6 +2,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
+from django.dispatch import receiver
 from django.utils import timezone
 import uuid
 
@@ -324,3 +325,5 @@ class Notification(models.Model):
             self.is_sent = True
             self.sent_at = timezone.now()
             self.save(update_fields=['is_sent', 'sent_at'])   
+
+receiver
