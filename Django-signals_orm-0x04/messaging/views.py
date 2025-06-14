@@ -189,10 +189,10 @@ class ConversationViewSet(viewsets.ModelViewSet):
  
         unread_messages = Message.objects.filter(
             conversation=conversation,
-            read=False,
+            is_read=False,
             is_deleted=False
         ).exclude(sender=request.user)
-        unread_messages.update(read=True)
+        unread_messages.update(is_read=True)
         
         page = request.query_params.get('page', 1)
         limit = min(int(request.query_params.get('limit', 50)), 100) 
@@ -421,7 +421,7 @@ class MessageViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """
         Set the sender as the current user and validate conversation access
-        New messages are unread by default (read=False)
+        New messages are unread by default (is_read=False)
         """
         conversation = serializer.validated_data['conversation']
 
@@ -811,11 +811,11 @@ def mark_conversation_as_read(request, conversation_id):
         # Mark all unread messages in this conversation as read
         unread_messages = Message.objects.filter(
             conversation=conversation,
-            read=False,
+            is_read=False,
             is_deleted=False
         ).exclude(sender=request.user)
         
-        unread_messages.update(read=True)
+        unread_messages.update(is_read=True)
         
         # Also update the participant's last_read_at (to maintain consistency with existing system)
         participant = conversation.conversation_participants.filter(user=request.user).first()
