@@ -326,4 +326,20 @@ class Notification(models.Model):
             self.sent_at = timezone.now()
             self.save(update_fields=['is_sent', 'sent_at'])   
 
-receiver
+class MessageHistory(models.Model):
+    """
+    Stores previous versions of a message before edits
+    """
+    history_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    message = models.ForeignKey('Message', on_delete=models.CASCADE, related_name='history')
+    previous_body = models.TextField()
+    edited_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'message_history'
+        verbose_name = 'Message History'
+        verbose_name_plural = 'Message History'
+        ordering = ['-edited_at']
+
+    def __str__(self):
+        return f"Edit history for message {self.message.message_id}"

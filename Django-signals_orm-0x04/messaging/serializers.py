@@ -3,7 +3,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from .models import User, Conversation, ConversationParticipant, Message, MessageReaction
+from .models import MessageHistory, User, Conversation, ConversationParticipant, Message, MessageReaction
 
 User = get_user_model()
 
@@ -30,15 +30,14 @@ class UserSerializer(serializers.ModelSerializer):
         """
         data = super().to_representation(instance)
         
-        # Populate full_name
         full_name = instance.get_full_name()
         data['full_name'] = full_name if full_name.strip() else instance.username
         
-        # Populate is_online_status
+
         if instance.is_online:
             data['is_online_status'] = "online"
         else:
-            # Consider user online if last seen within 5 minutes
+          
             time_threshold = timezone.now() - timezone.timedelta(minutes=5)
             if instance.last_seen and instance.last_seen > time_threshold:
                 data['is_online_status'] = "recently_active"
@@ -74,7 +73,7 @@ class UserMinimalSerializer(serializers.ModelSerializer):
         """
         data = super().to_representation(instance)
         
-        # Populate full_name
+
         full_name = instance.get_field_names()
         data['full_name'] = full_name if full_name.strip() else instance.username
         
@@ -98,8 +97,7 @@ class MessageReactionSerializer(serializers.ModelSerializer):
         Override to populate computed fields
         """
         data = super().to_representation(instance)
-        
-        # Populate reaction_emoji
+
         data['reaction_emoji'] = dict(MessageReaction.REACTION_TYPES).get(instance.reaction_type, '')
         
         return data
@@ -137,7 +135,7 @@ class MessageSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         request = self.context.get('request')
         
-        # Populate reply_to_message
+
         if instance.reply_to and not instance.reply_to.is_deleted:
             data['reply_to_message'] = {
                 'message_id': instance.reply_to.message_id,
@@ -149,7 +147,7 @@ class MessageSerializer(serializers.ModelSerializer):
         else:
             data['reply_to_message'] = None
         
-        # Populate reaction_summary
+
         reactions = instance.message_reactions.all()
         summary = {}
         for reaction in reactions:
@@ -163,11 +161,9 @@ class MessageSerializer(serializers.ModelSerializer):
             summary[reaction_type]['count'] += 1
             summary[reaction_type]['users'].append(reaction.user.username)
         data['reaction_summary'] = summary
-        
-        # Populate replies_count
+
         data['replies_count'] = instance.replies.filter(is_deleted=False).count()
-        
-        # Populate file_url
+
         if instance.file_attachment:
             if request:
                 data['file_url'] = request.build_absolute_uri(instance.file_attachment.url)
@@ -175,8 +171,7 @@ class MessageSerializer(serializers.ModelSerializer):
                 data['file_url'] = instance.file_attachment.url
         else:
             data['file_url'] = None
-        
-        # Populate is_own_message
+
         if request and request.user.is_authenticated:
             data['is_own_message'] = instance.sender == request.user
         else:
@@ -200,12 +195,10 @@ class MessageCreateSerializer(serializers.ModelSerializer):
         message_type = data.get('message_type', 'text')
         message_body = data.get('message_body', '')
         file_attachment = data.get('file_attachment')
-        
-        # Text messages must have content
+
         if message_type == 'text' and not message_body.strip():
             raise serializers.ValidationError("Text messages cannot be empty.")
-        
-        # File messages must have attachments
+
         if message_type in ['image', 'file', 'audio', 'video'] and not file_attachment:
             raise serializers.ValidationError(f"{message_type.title()} messages must include a file attachment.")
         
@@ -233,7 +226,7 @@ class ConversationParticipantSerializer(serializers.ModelSerializer):
         """
         data = super().to_representation(instance)
         
-        # Populate unread_count
+
         data['unread_count'] = instance.conversation.messages.filter(
             sent_at__gt=instance.last_read_at,
             is_deleted=False
@@ -274,8 +267,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         """
         data = super().to_representation(instance)
         request = self.context.get('request')
-        
-        # Populate last_message
+
         last_message = instance.get_last_message()
         if last_message:
             data['last_message'] = {
@@ -289,16 +281,15 @@ class ConversationSerializer(serializers.ModelSerializer):
         else:
             data['last_message'] = None
         
-        # Populate unread_count
+
         if request and request.user.is_authenticated:
             data['unread_count'] = instance.get_unread_count(request.user)
         else:
             data['unread_count'] = 0
         
-        # Populate participant_count
+
         data['participant_count'] = instance.conversation_participants.filter(is_active=True).count()
-        
-        # Populate display_name
+
         if instance.conversation_type == 'group' and instance.title:
             data['display_name'] = instance.title
         elif request and request.user.is_authenticated and instance.conversation_type == 'direct':
@@ -311,7 +302,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         else:
             data['display_name'] = f"Conversation {str(instance.conversation_id)[:8]}"
         
-        # Populate display_image
+
         if request and request.user.is_authenticated and instance.conversation_type == 'direct':
             other_participant = instance.participants.exclude(user_id=request.user.user_id).first()
             if other_participant and other_participant.profile_picture:
@@ -338,8 +329,7 @@ class ConversationDetailSerializer(ConversationSerializer):
         Override to populate recent_messages
         """
         data = super().to_representation(instance)
-        
-        # Populate recent_messages
+
         recent_messages = instance.messages.filter(is_deleted=False)[:20]
         data['recent_messages'] = MessageSerializer(
             recent_messages, 
@@ -378,8 +368,7 @@ class ConversationCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Group conversations must have at least one other participant."
             )
-        
-        # Validate that all participant IDs exist
+
         existing_users = User.objects.filter(user_id__in=participant_ids)
         if len(existing_users) != len(participant_ids):
             raise serializers.ValidationError(
@@ -393,20 +382,18 @@ class ConversationCreateSerializer(serializers.ModelSerializer):
         participant_ids = validated_data.pop('participant_ids', [])
         request = self.context.get('request')
         
-        # Create the conversation
+
         conversation = Conversation.objects.create(
             created_by=request.user,
             **validated_data
         )
-        
-        # Add the creator as a participant
+
         ConversationParticipant.objects.create(
             conversation=conversation,
             user=request.user,
             role='owner' if validated_data.get('conversation_type') == 'group' else 'member'
         )
         
-        # Add other participants
         for user_id in participant_ids:
             user = User.objects.get(user_id=user_id)
             ConversationParticipant.objects.create(
@@ -430,17 +417,27 @@ class MessageReactionCreateSerializer(serializers.ModelSerializer):
         """Create or update a message reaction"""
         message = self.context['message']
         user = self.context['request'].user
-        
-        # Remove existing reaction of the same type if it exists
+   
         MessageReaction.objects.filter(
             message=message,
             user=user,
             reaction_type=validated_data['reaction_type']
         ).delete()
         
-        # Create new reaction
         return MessageReaction.objects.create(
             message=message,
             user=user,
             **validated_data
         )
+
+class MessageHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MessageHistory
+        fields = ['previous_body', 'edited_at']
+
+class MessageSerializer(serializers.ModelSerializer):
+    history = MessageHistorySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Message
+        fields = ['message_id', 'message_body', 'is_edited', 'edited_at', 'history']

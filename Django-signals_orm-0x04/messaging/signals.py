@@ -1,7 +1,8 @@
-from django.db.models.signals import post_save
+from datetime import timezone
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
-from .models import Message, Notification, ConversationParticipant
+from .models import Message, Notification, ConversationParticipant, MessageHistory
 
 User = get_user_model()
 
@@ -92,3 +93,23 @@ def handle_message_mentions(sender, instance, created, **kwargs):
     
     if mention_notifications:
         Notification.objects.bulk_create(mention_notifications)
+
+@receiver(pre_save, sender=Message)
+def log_message_edit(sender, instance, **kwargs):
+    if not instance.pk:
+        return  
+
+    try:
+        original = Message.objects.get(pk=instance.pk)
+    except Message.DoesNotExist:
+        return 
+
+
+    if original.message_body != instance.message_body:
+        MessageHistory.objects.create(
+            message=original,
+            previous_body=original.message_body
+        )
+        instance.is_edited = True
+        instance.edited_at = timezone.now()
+
