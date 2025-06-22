@@ -3,13 +3,13 @@ services:
   db:
     image: postgres:17
     environment:
-      POSTGRES_DB: messaging_app
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin1 
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d messaging_app"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -18,7 +18,7 @@ services:
     build: .
     environment:
       - ALLOWED_HOSTS=web,localhost,127.0.0.1,0.0.0.0
-      - DATABASE_URL=postgres://postgres:admin1@db:5432/messaging_app
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     command: bash -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
