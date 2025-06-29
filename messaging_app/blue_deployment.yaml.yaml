@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-app-blue
+  labels:
+    app: django
+    version: "1.0"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: django
+      version: "1.0"
+  template:
+    metadata:
+      labels:
+        app: django
+        version: "1.0"
+    spec:
+      containers:
+      - name: django
+        image: your-registry/django-app:v1
+        ports:
+        - containerPort: 8000
