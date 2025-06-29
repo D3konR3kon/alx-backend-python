@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-messaging-app
+  labels:
+    app: django-messaging_app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-messaging_app
+  template:
+    metadata:
+      labels:
+        app: django-messaging_app
+    spec:
+      containers:
+      - name: messaging-app
+        image: messaging_app:latest  
+        ports:
+        - containerPort: 8000 
+        env:
+        - name: DJANGO_SETTINGS_MODULE
+          value: "messaging.settings"  
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"

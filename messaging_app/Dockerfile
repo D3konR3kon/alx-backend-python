@@ -1,17 +1,24 @@
+FROM python:3.11-slim
 
-FROM python:3.11
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-
-
+RUN mkdir /app
 WORKDIR /app
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
+
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install python-dotenv
 
 COPY . .
+
+RUN ls -la /app/manage.py || echo "Manage.py missing!"
 
 EXPOSE 8000
 
