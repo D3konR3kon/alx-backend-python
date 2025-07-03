@@ -32,7 +32,7 @@ pipeline {
                 sh """
                     cd ${PROJECT_DIR}
                     . venv/bin/activate
-                    python -m pytest chat/tests/ --junitxml=test-results.xml --cov=chat --cov-report=html --ds=${DJANGO_SETTINGS_MODULE}
+                    python -m pytest chats/tests/ --junitxml=test-results.xml --cov=chats --cov-report=html --ds=${DJANGO_SETTINGS_MODULE}
                 """
             }
             post {
