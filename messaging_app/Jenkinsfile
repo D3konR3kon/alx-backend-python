@@ -23,7 +23,7 @@ pipeline {
                 sh """
                     cd ${PROJECT_NAME}
                     python -m venv ${VENV_DIR}
-                    source venv/bin/activate
+                    . venv/bin/activate
                     ${PIP} install --upgrade pip
                     ${PIP} install -r requirements.txt
                     echo "Installed packages:"
@@ -38,7 +38,7 @@ pipeline {
             steps {
                 sh """
                     cd ${PROJECT_NAME}
-                    source venv/bin/activate
+                    . venv/bin/activate
                     echo "Running tests..."
                     ${PYTEST} --junitxml=test-results.xml --cov=. --cov-report=html
                 """
