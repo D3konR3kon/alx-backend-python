@@ -3,35 +3,36 @@ pipeline {
 
     environment {
         PROJECT_NAME = 'messaging_app'
+        VENV_DIR = 'venv'
+        PYTHON = 'venv/bin/python'
+        PIP = 'venv/bin/pip'
+        PYTEST = 'venv/bin/pytest'
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
                 git branch: 'main', 
-                credentialsId: 'd96ab65b-91c3-40a8-8ac3-46bd6231fa82', 
-                url: 'https://github.com/D3konR3kon/alx-backend-python.git'
+                    credentialsId: 'd96ab65b-91c3-40a8-8ac3-46bd6231fa82', 
+                    url: 'https://github.com/D3konR3kon/alx-backend-python.git'
             }
         }
-        
+
         stage('Setup Python') {
             steps {
                 sh """
                     python -m venv ${VENV_DIR}
-                    . ${VENV_DIR}/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
+                    ${PIP} install --upgrade pip
+                    ${PIP} install -r requirements.txt
                 """
             }
         }
-        
+
         stage('Run Tests') {
             steps {
-                sh """
-                    . ${VENV_DIR}/bin/activate
-                    pytest --junitxml=test-results.xml
-                """
+                sh "${PYTEST} --junitxml=test-results.xml"
             }
+
             post {
                 always {
                     junit 'test-results.xml'
@@ -47,7 +48,7 @@ pipeline {
             }
         }
     }
-    
+
     post {
         always {
             cleanWs()
@@ -60,3 +61,6 @@ pipeline {
         }
     }
 }
+
+// This Jenkinsfile is designed to automate the CI/CD process for a Python project using Docker.
+// It includes stages for checking out the code, setting up a Python virtual environment, installing dependencies

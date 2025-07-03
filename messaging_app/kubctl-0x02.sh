@@ -30,3 +30,4 @@ kubectl get deployments -l app=django
 
 echo -e "\nService routing:"
 kubectl describe service django-router | grep -A2 Selector
+
