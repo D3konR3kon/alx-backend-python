@@ -21,9 +21,11 @@ pipeline {
         stage('Setup Python') {
             steps {
                 sh """
+                    cd ${PROJECT_NAME}
                     python -m venv ${VENV_DIR}
                     ${PIP} install --upgrade pip
                     ${PIP} install -r requirements.txt
+                    ${PYTHON} manage.py test
                 """
             }
         }
