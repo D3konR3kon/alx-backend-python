@@ -1,9 +1,13 @@
 pipeline {
-    agent any
-    
+    agent {
+        docker {
+            image 'python:3.11-slim'  
+            args '-v /tmp:/tmp'     
+        }
+    }
+
     environment {
         PROJECT_NAME = 'messaging_app'
-        VENV_DIR = "${WORKSPACE}/venv"
     }
     
     stages {
@@ -49,9 +53,9 @@ pipeline {
         }
     }
     
-    post {
-        always {
-            cleanWs()
-        }
-    }
+    // post {
+    //     always {
+    //         cleanWs()
+    //     }
+    // }
 }
