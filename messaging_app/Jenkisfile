@@ -1,0 +1,57 @@
+pipeline {
+    agent any
+    
+    environment {
+        PROJECT_NAME = 'messaging_app'
+        VENV_DIR = "${WORKSPACE}/venv"
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', 
+                credentialsId: 'd96ab65b-91c3-40a8-8ac3-46bd6231fa82', 
+                url: 'https://github.com/D3konR3kon/alx-backend-python.git'
+            }
+        }
+        
+        stage('Setup Python') {
+            steps {
+                sh """
+                    python -m venv ${VENV_DIR}
+                    . ${VENV_DIR}/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                """
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                sh """
+                    . ${VENV_DIR}/bin/activate
+                    pytest --junitxml=test-results.xml
+                """
+            }
+            post {
+                always {
+                    junit 'test-results.xml'
+                    publishHTML target: [
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: false,
+                        keepAll: true,
+                        reportDir: 'htmlcov',
+                        reportFiles: 'index.html',
+                        reportName: 'Coverage Report'
+                    ]
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
