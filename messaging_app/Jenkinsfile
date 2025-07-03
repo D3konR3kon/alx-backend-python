@@ -2,11 +2,8 @@ pipeline {
     agent any
 
     environment {
-        PROJECT_NAME = 'messaging_app'
-        VENV_DIR = 'venv'
-        PYTHON = 'venv/bin/python'
-        PIP = 'venv/bin/pip'
-        PYTEST = 'venv/bin/pytest'
+        PROJECT_DIR = 'messaging_app' 
+        VENV_DIR = "${PROJECT_DIR}/venv"  
     }
 
     stages {
@@ -18,18 +15,15 @@ pipeline {
             }
         }
 
-        stage('Setup Python') {
+        stage('Setup Environment') {
             steps {
                 sh """
-                    cd ${PROJECT_NAME}
-                    python -m venv ${VENV_DIR}
+                    cd ${PROJECT_DIR}
+                    python3 -m venv venv
                     . venv/bin/activate
-                    ${PIP} install --upgrade pip
-                    ${PIP} install -r requirements.txt
-                    echo "Installed packages:"
-                    pip list
-                    echo "Running initial tests..."
-                    ${PYTHON} manage.py test
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                    pip install pytest pytest-cov  # Ensure test dependencies
                 """
             }
         }
@@ -37,22 +31,19 @@ pipeline {
         stage('Run Tests') {
             steps {
                 sh """
-                    cd ${PROJECT_NAME}
+                    cd ${PROJECT_DIR}
                     . venv/bin/activate
-                    echo "Running tests..."
-                    ${PYTEST} --junitxml=test-results.xml --cov=. --cov-report=html
+                    python -m pytest --junitxml=test-results.xml --cov=. --cov-report=html
                 """
-
             }
-
             post {
                 always {
-                    junit 'test-results.xml'
+                    junit "${PROJECT_DIR}/test-results.xml" 
                     publishHTML target: [
                         allowMissing: false,
                         alwaysLinkToLastBuild: false,
                         keepAll: true,
-                        reportDir: 'htmlcov',
+                        reportDir: "${PROJECT_DIR}/htmlcov",  
                         reportFiles: 'index.html',
                         reportName: 'Coverage Report'
                     ]
@@ -65,14 +56,5 @@ pipeline {
         always {
             cleanWs()
         }
-        success {
-            echo 'Pipeline completed successfully!'
-        }
-        failure {
-            echo 'Pipeline failed!'
-        }
     }
 }
-
-// This Jenkinsfile is designed to automate the CI/CD process for a Python project using Docker.
-// It includes stages for checking out the code, setting up a Python virtual environment, installing dependencies
