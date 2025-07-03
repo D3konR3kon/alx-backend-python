@@ -23,8 +23,12 @@ pipeline {
                 sh """
                     cd ${PROJECT_NAME}
                     python -m venv ${VENV_DIR}
+                    source venv/bin/activate
                     ${PIP} install --upgrade pip
                     ${PIP} install -r requirements.txt
+                    echo "Installed packages:"
+                    pip list
+                    echo "Running initial tests..."
                     ${PYTHON} manage.py test
                 """
             }
@@ -32,7 +36,13 @@ pipeline {
 
         stage('Run Tests') {
             steps {
-                sh "${PYTEST} --junitxml=test-results.xml"
+                sh """
+                    cd ${PROJECT_NAME}
+                    source venv/bin/activate
+                    echo "Running tests..."
+                    ${PYTEST} --junitxml=test-results.xml --cov=. --cov-report=html
+                """
+
             }
 
             post {
