@@ -1,33 +1,53 @@
+# Django Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: django-messaging-app
+  name: messaging-app
   labels:
-    app: django-messaging_app
+    app: messaging-app
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
-      app: django-messaging_app
+      app: messaging-app
   template:
     metadata:
       labels:
-        app: django-messaging_app
+        app: messaging-app
     spec:
       containers:
       - name: messaging-app
-        image: messaging_app:latest  
+        image: messaging_app-web
         ports:
-        - containerPort: 8000 
+        - containerPort: 8000
         env:
-        - name: DJANGO_SETTINGS_MODULE
-          value: "messaging.settings"  
-        - name: PYTHONUNBUFFERED
-          value: "1"
+        - name: DEBUG
+          value: "True"
+        # Add your environment variables here
+        # - name: DATABASE_URL
+        #   value: "your-database-url"
+        # - name: SECRET_KEY
+        #   value: "your-secret-key"
         resources:
           requests:
-            cpu: "100m"
             memory: "128Mi"
+            cpu: "100m"
           limits:
-            cpu: "500m"
-            memory: "512Mi"
+            memory: "256Mi"
+            cpu: "200m"
+---
+# Django Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: messaging-app-service
+  labels:
+    app: messaging-app
+spec:
+  type: ClusterIP
+  selector:
+    app: messaging-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
