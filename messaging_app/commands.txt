@@ -1,0 +1,28 @@
+# Commands to install Nginx Ingress Controller and apply Ingress configuration
+
+# Step 1: Install Nginx Ingress Controller using Helm (recommended method)
+helm upgrade --install ingress-nginx ingress-nginx \
+  --repo https://kubernetes.github.io/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+
+
+# Step 2: Wait for the Ingress Controller to be ready
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+
+# Step 3: Apply the Ingress configuration
+kubectl apply -f ingress.yaml
+
+# Step 4: Verify the Ingress resource was created
+kubectl get ingress django-app-ingress
+
+# Step 5: Get the external IP of the Ingress Controller (for cloud providers)
+kubectl get service ingress-nginx-controller --namespace ingress-nginx
+
+# Step 6: For local development, you can port-forward to test
+# kubectl port-forward --namespace ingress-nginx service/ingress-nginx-controller 8080:80
+
+# Optional: Check Ingress Controller logs if needed
+# kubectl logs --namespace ingress-nginx -l app.kubernetes.io/name=ingress-nginx
