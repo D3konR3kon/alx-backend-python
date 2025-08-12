@@ -23,7 +23,6 @@ spec:
         env:
         - name: DEBUG
           value: "True"
-        # Add your environment variables here
         # - name: DATABASE_URL
         #   value: "your-database-url"
         # - name: SECRET_KEY
@@ -35,19 +34,4 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "200m"
----
-# Django Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: messaging-app-service
-  labels:
-    app: messaging-app
-spec:
-  type: ClusterIP
-  selector:
-    app: messaging-app
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 8000
+
