@@ -1,0 +1,53 @@
+pipeline {
+    agent any
+
+    environment {
+        PROJECT_DIR = 'messaging_app'
+        DJANGO_SETTINGS_MODULE = 'messaging_app.settings'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    credentialsId: 'd96ab65b-91c3-40a8-8ac3-46bd6231fa82',
+                    url: 'https://github.com/D3konR3kon/alx-backend-python.git'
+            }
+        }
+
+        stage('Setup Environment') {
+            steps {
+                sh """
+                    cd ${PROJECT_DIR}
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt pytest pytest-cov pytest-django
+                """
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                sh """
+                    cd ${PROJECT_DIR}
+                    . venv/bin/activate
+                    python -m pytest chats/tests/ --junitxml=test-results.xml --cov=chats --cov-report=html --ds=${DJANGO_SETTINGS_MODULE}
+                """
+            }
+            post {
+                always {
+                    junit "${PROJECT_DIR}/test-results.xml"
+                    publishHTML target: [
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: false,
+                        keepAll: true,
+                        reportDir: "${PROJECT_DIR}/htmlcov",
+                        reportFiles: 'index.html',
+                        reportName: 'Coverage Report'
+                    ]
+                }
+            }
+        }
+    }
+}
