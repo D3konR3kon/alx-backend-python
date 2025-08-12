@@ -31,3 +31,7 @@ catch {
     Write-Host "3. Try: wsl --update && wsl --shutdown"
     exit 1
 }
+
+kubectl get pods
+
+kubectl cluster-info
